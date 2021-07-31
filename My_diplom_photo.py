@@ -6,11 +6,6 @@ import time
 from tqdm import tqdm
 import sys
 
-# Прогресс бар
-def get_progress_bar():
-    for i in tqdm(range(500)):
-        time.sleep(0.001)
-
 # Класс для получения списка фотогорафий с "вконтакте"
 class VkUser:
     url = 'https://api.vk.com/method/'
@@ -40,7 +35,7 @@ class VkUser:
             print('У вас недостаточно прав доступа...')
             sys.exit(0)
 
-    def get_file(self):
+    def get_data_image(self):
         dict_files = {}
         count = 1
         file_list = []
@@ -48,20 +43,27 @@ class VkUser:
 
         for lists in self.get_list['items']:
             file_name = str(lists['likes']['count']) + '.jpg'
-            for data in lists['sizes']:
-                if data['type'] == 'z':
+            max_size = 0
+            if file_name not in file_list:
+                for data in lists['sizes']:
                     file_url = data["url"]
                     size = data['height'] * data['width']
                     size_type = data['type']
-                    if file_name not in file_list:
+                    if size >= max_size:
                         dict_files[count] = [file_name, file_url, size, size_type]
-                        file_list.append(file_name)
-                        count += 1
-                    else:
-                        file_name = str(lists['likes']['count']) + '_' + datetime.utcfromtimestamp \
-                            (lists['date']).strftime('%d_%m_%Y_%H_%M_%S') + '.jpg'
+                        max_size = size
+                    file_list.append(file_name)
+            else:
+                file_name = str(lists['likes']['count']) + '_' + datetime.utcfromtimestamp \
+                    (lists['date']).strftime('%d_%m_%Y_%H_%M_%S') + '.jpg'
+                for data in lists['sizes']:
+                    file_url = data["url"]
+                    size = data['height'] * data['width']
+                    size_type = data['type']
+                    if size >= max_size:
                         dict_files[count] = [file_name, file_url, size, size_type]
-                        count += 1
+                        max_size = size
+            count += 1
         return dict_files
 
 # Класс для получения списка фотогорафий с "одноклассники"
@@ -129,7 +131,7 @@ class OkUser:
             list.append(dict['title'])
         return [dict_1, list]
 
-    def get_id_album(self):
+    def get_name_album(self):
         album = self.get_aid_album()
         while True:
             albums_name = input(
@@ -161,7 +163,7 @@ class OkUser:
         list_photo_url = self.url + '=' + self.method_photos
 
         params_1 = self.get_params_1(method=self.method_photos)
-        params_1.update(self.get_id_album())
+        params_1.update(self.get_name_album())
         self.params_res = params_1
         params_1['sig'] = self.get_hash_md(params_res=self.params_res)
         params_1.update(self.get_params())
@@ -169,7 +171,7 @@ class OkUser:
         req = requests.get(list_photo_url, params=params_1).json()
         return req['photos']
 
-    def get_file(self):
+    def get_data_image(self):
         dict_files = {}
         count = 1
         file_list = []
@@ -190,7 +192,7 @@ class OkUser:
         return dict_files
 
 # Класс обработки полученного списка фотографий
-class List_Files:
+class ListFiles:
     def __init__(self, get_file, file_count=5):
         self.get_file = get_file
         # Количество загружаемых фотографий
@@ -225,7 +227,7 @@ class List_Files:
         return res_dict
 
 # Класс для записи json файла со списком фотографий
-class File_Json_Write:
+class FileJsonWrite:
     def __init__(self, list_files, name_file):
         self.list_files = list_files
         self.name_file = name_file
@@ -237,7 +239,7 @@ class File_Json_Write:
             json.dump(self.list_files, f, ensure_ascii=False, indent=2)
 
 # Класс загрузки файлов на "яндекс диск"
-class File_Upload_Ydisk:
+class FileUploadYdisk:
     def __init__(self, file_url):
         self.file_url = file_url
         # Введите token для доступа к яндекс диску
@@ -260,8 +262,7 @@ class File_Upload_Ydisk:
             upload_url = "https://cloud-api.yandex.net/v1/disk/resources/upload"
             headers = self.get_headers()
 
-            for name in self.file_url.items():
-                get_progress_bar()
+            for name in tqdm(self.file_url.items()):
                 path = name[0]
                 params = {"path": '/' + dir_name + '/' + path, "overwrite": "true"}
                 r = requests.get(name[1])
@@ -277,12 +278,12 @@ class File_Upload_Ydisk:
 # Экземляры классов для работы с "вконтакте"
 def get_vk(album_id):
     # Здесь введите id_user - id пользователя вконтакте, фото которого копируете и token - для доступа
-    vk_1 = VkUser(album_id=album_id, id_user='1',
-                  token='')
-    list_files = List_Files(vk_1.get_file())
-    file_jason_write = File_Json_Write(list_files.get_file_json(), 'Archiv_Vk')
+    vk_1 = VkUser(album_id=album_id, id_user='552934290',
+                  token='958eb5d439726565e9333aa30e50e0f937ee432e927f0dbd541c541887d919a7c56f95c04217915c32008')
+    list_files = ListFiles(vk_1.get_data_image())
+    file_jason_write = FileJsonWrite(list_files.get_file_json(), 'Archiv_Vk')
     file_jason_write.get_file_json()
-    yd_upload = File_Upload_Ydisk(list_files.get_file_url())
+    yd_upload = FileUploadYdisk(list_files.get_file_url())
     return yd_upload.upload()
 
 # Выбор альбома в "вконтакте"
@@ -309,12 +310,12 @@ def get_ok():
     # Здесь введите id пользователя одноклассники, фото которого надо скопировать, access_token - токен для доступа,
     # session_secret_key - секретный ключ для доступа, application_key - ключ приложения
     Ok_1 = OkUser(id_user='567303295070', access_token='', session_secret_key='', application_key='')
-    list_files = List_Files(Ok_1.get_file())
+    list_files = ListFiles(Ok_1.get_data_image())
 
-    file_jason_write = File_Json_Write(list_files.get_file_json(), 'Archiv_Ok')
+    file_jason_write = FileJsonWrite(list_files.get_file_json(), 'Archiv_Ok')
     file_jason_write.get_file_json()
 
-    yd_upload = File_Upload_Ydisk(list_files.get_file_url())
+    yd_upload = FileUploadYdisk(list_files.get_file_url())
     return yd_upload.upload()
 
 # Выбор соцсети, откуда будут загружаться фото
